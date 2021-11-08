@@ -5,6 +5,8 @@ import net.fabricmc.installer.util.Reference;
 import net.fabricmc.installer.util.Utils;
 import org.json.JSONObject;
 
+import mjson.Json;
+
 import javax.swing.*;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,25 +18,26 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class VanillaLauncherIntegration {
-    public static boolean installToLauncher(Path vanillaGameDir, Path instanceDir, String profileName, String gameVersion, String loaderName, String loaderVersion, Icon icon) throws IOException {
+    public static Map.Entry<Boolean, Path> installToLauncher(Path vanillaGameDir, Path instanceDir, String profileName, String gameVersion, String loaderName, String loaderVersion, Icon icon) throws IOException {
         String versionId = String.format("%s-%s-%s", loaderName, loaderVersion, gameVersion);
 
         ProfileInstaller.LauncherType launcherType = System.getProperty("os.name").contains("Windows") ? getLauncherType(vanillaGameDir) : /* Return standalone if we aren't on Windows.*/ ProfileInstaller.LauncherType.WIN32;
         if (launcherType == null) {
             // The installation has been canceled via closing the window, most likely.
-            return false;
+            return new AbstractMap.SimpleEntry<>(false, null);
         }
-        installVersion(vanillaGameDir, gameVersion, loaderName, loaderVersion, launcherType);
+        Path modPath = installVersion(vanillaGameDir, gameVersion, loaderName, loaderVersion, launcherType);
         installProfile(vanillaGameDir, instanceDir, profileName, versionId, icon, launcherType);
-        return true;
+        return new AbstractMap.SimpleEntry<>(true, modPath);
     }
 
-    public static void installVersion(Path mcDir, String gameVersion, String loaderName, String loaderVersion, ProfileInstaller.LauncherType launcherType) throws IOException {
+    public static Path installVersion(Path mcDir, String gameVersion, String loaderName, String loaderVersion, ProfileInstaller.LauncherType launcherType) throws IOException {
         System.out.println("Installing " + gameVersion + " with fabric " + loaderVersion + " to launcher " + launcherType);
         String versionId = String.format("%s-%s-%s", loaderName, loaderVersion, gameVersion);
         Path versionsDir = mcDir.resolve("versions");
         Path profileDir = versionsDir.resolve(versionId);
-        Path profileJson = profileDir.resolve(versionId + ".json");
+        Path profileJsonPath = profileDir.resolve(versionId + ".json");
+        Path modPath = profileDir.resolve("iris-reserved/");
         if (!Files.exists(profileDir)) {
             Files.createDirectories(profileDir);
         }
@@ -43,7 +46,12 @@ public class VanillaLauncherIntegration {
         Files.deleteIfExists(dummyJar);
         Files.createFile(dummyJar);
         URL profileUrl = new URL(Reference.getMetaServerEndpoint(String.format("v2/versions/loader/%s/%s/profile/json", gameVersion, loaderVersion)));
-        Utils.downloadFile(profileUrl, profileJson);
+        Json profileJson = Json.read(profileUrl);
+        Map<String, Json> hi = profileJson.asJsonMap().get("arguments").asJsonMap();
+        hi.putIfAbsent("jvm", Json.factory().array());
+        hi.get("jvm").asJsonList().add(Json.factory().string("-DirisModsFolder=\""+modPath+"\""));
+        Utils.writeToFile(profileJsonPath, profileJson.toString());
+        return modPath;
     }
 
     private static void installProfile(Path mcDir, Path instanceDir, String profileName, String versionId, Icon icon, ProfileInstaller.LauncherType launcherType) throws IOException {

@@ -213,15 +213,17 @@ public class Installer {
             }
 
             String loaderName = installAsMod ? "fabric-loader" : "iris-fabric-loader";
+            Path modPath;
 
             try {
                 URL loaderVersionUrl = new URL("https://raw.githubusercontent.com/IrisShaders/Iris-Installer-Maven/master/latest-loader");
                 String loaderVersion = installAsMod ? Main.LOADER_META.getLatestVersion(false).getVersion() : Utils.readTextFile(loaderVersionUrl);
-                boolean success = VanillaLauncherIntegration.installToLauncher(getVanillaGameDir(), getInstallDir(), installAsMod ? "Fabric Loader " + selectedVersion : selectedEditionDisplayName, selectedVersion, loaderName, loaderVersion, installAsMod ? VanillaLauncherIntegration.Icon.FABRIC: VanillaLauncherIntegration.Icon.IRIS);
-                if (!success) {
+                Map.Entry<Boolean, Path> success = VanillaLauncherIntegration.installToLauncher(getVanillaGameDir(), getInstallDir(), installAsMod ? "Fabric Loader " + selectedVersion : selectedEditionDisplayName, selectedVersion, loaderName, loaderVersion, installAsMod ? VanillaLauncherIntegration.Icon.FABRIC: VanillaLauncherIntegration.Icon.IRIS);
+                if (!success.getKey()) {
                     System.out.println("Failed to install to launcher, canceling!");
                     return;
                 }
+                modPath = success.getValue();
             } catch (IOException e) {
                 System.out.println("Failed to install version and profile to vanilla launcher!");
                 e.printStackTrace();
@@ -271,7 +273,7 @@ public class Installer {
                     File installDir = getInstallDir().toFile();
                     if (!installDir.exists() || !installDir.isDirectory()) installDir.mkdir();
 
-                    File modsFolder = getInstallDir().resolve(installAsMod ? "mods" : "iris-reserved").toFile();
+                    File modsFolder = installAsMod ? getInstallDir().resolve("mods").toFile() : modPath.toFile();
                     File[] modsFolderContents = modsFolder.listFiles();
 
                     if (modsFolderContents != null) {
@@ -339,7 +341,7 @@ public class Installer {
 
                     if (!modsFolder.exists() || !modsFolder.isDirectory()) modsFolder.mkdir();
 
-                    boolean installSuccess = installFromZip(saveLocation);
+                    boolean installSuccess = installFromZip(saveLocation, modsFolder);
                     if (installSuccess) {
                         button.setText("Installation succeeded!");
                         finishedSuccessfulInstall = true;
@@ -407,7 +409,7 @@ public class Installer {
         }
     }
 
-    public boolean installFromZip(File zip) {
+    public boolean installFromZip(File zip, File modsFolder) {
         try {
             int BUFFER_SIZE = 2048; // Buffer Size
 
@@ -419,7 +421,7 @@ public class Installer {
                 String entryName = entry.getName();
 
                 if (!installAsMod && entryName.startsWith("mods/")) {
-                    entryName = entryName.replace("mods/", "iris-reserved/");
+                    entryName = entryName.replace("mods/", modsFolder+"/");
                 }
 
                 File filePath = getInstallDir().resolve(entryName).toFile();
