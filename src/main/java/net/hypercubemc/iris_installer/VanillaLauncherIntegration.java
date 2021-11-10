@@ -49,13 +49,13 @@ public class VanillaLauncherIntegration {
         Json profileJson = Json.read(profileUrl);
         if (loaderName.equals("iris-fabric-loader")) {
         	installDir = profileDir.resolve("iris-reserved").toFile();
-            editVersionJson(profileJson, installDir);
+            editVersionJson(profileJson);
         }
         Utils.writeToFile(profileJsonPath, profileJson.toString());
         return installDir;
     }
     
-    private static void editVersionJson(Json profileJson, File installDir) {
+    private static void editVersionJson(Json profileJson) {
         Json.Factory factory = Json.factory();
         Map<String, Json> json = profileJson.asJsonMap();
         // Replace fabric-loader-etc with iris-fabric-loader-etc
@@ -69,8 +69,6 @@ public class VanillaLauncherIntegration {
                 entry.asJsonMap().put("url", factory.string("https://raw.githubusercontent.com/IrisShaders/Iris-Installer-Maven/master/"));
             }
         }
-        // Add jvm argument with path
-        json.get("arguments").asJsonMap().get("jvm").add(factory.string("-DirisModsFolder=" + installDir.getAbsolutePath()));
     }
 
     private static void installProfile(Path mcDir, Path instanceDir, String profileName, String versionId, Icon icon, ProfileInstaller.LauncherType launcherType) throws IOException {
