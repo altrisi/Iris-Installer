@@ -7,6 +7,8 @@ import net.fabricmc.installer.util.Utils;
 import org.json.JSONObject;
 
 import javax.swing.*;
+
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -16,25 +18,26 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class VanillaLauncherIntegration {
-    public static boolean installToLauncher(Path vanillaGameDir, Path instanceDir, String profileName, String gameVersion, String loaderName, String loaderVersion, Icon icon) throws IOException {
+    public static File installToLauncher(Path vanillaGameDir, Path instanceDir, String profileName, String gameVersion, String loaderName, String loaderVersion, Icon icon) throws IOException {
         String versionId = String.format("%s-%s-%s", loaderName, loaderVersion, gameVersion);
 
         ProfileInstaller.LauncherType launcherType = System.getProperty("os.name").contains("Windows") ? getLauncherType(vanillaGameDir) : /* Return standalone if we aren't on Windows.*/ ProfileInstaller.LauncherType.WIN32;
         if (launcherType == null) {
             // The installation has been canceled via closing the window, most likely.
-            return false;
+            return null;
         }
-        installVersion(vanillaGameDir, gameVersion, loaderName, loaderVersion, launcherType);
+        File installDir = installVersion(vanillaGameDir, gameVersion, loaderName, loaderVersion, launcherType);
         installProfile(vanillaGameDir, instanceDir, profileName, versionId, icon, launcherType);
-        return true;
+        return installDir;
     }
 
-    public static void installVersion(Path mcDir, String gameVersion, String loaderName, String loaderVersion, ProfileInstaller.LauncherType launcherType) throws IOException {
+    public static File installVersion(Path mcDir, String gameVersion, String loaderName, String loaderVersion, ProfileInstaller.LauncherType launcherType) throws IOException {
         System.out.println("Installing " + gameVersion + " with fabric " + loaderVersion + " to launcher " + launcherType);
         String versionId = String.format("%s-%s-%s", loaderName, loaderVersion, gameVersion);
         Path versionsDir = mcDir.resolve("versions");
         Path profileDir = versionsDir.resolve(versionId);
         Path profileJsonPath = profileDir.resolve(versionId + ".json");
+        File installDir = mcDir.resolve("mods").toFile();
         if (!Files.exists(profileDir)) {
             Files.createDirectories(profileDir);
         }
@@ -45,12 +48,14 @@ public class VanillaLauncherIntegration {
         URL profileUrl = new URL(Reference.getMetaServerEndpoint(String.format("v2/versions/loader/%s/%s/profile/json", gameVersion, loaderVersion)));
         Json profileJson = Json.read(profileUrl);
         if (loaderName.equals("iris-fabric-loader")) {
-            editVersionJson(profileJson);
+        	installDir = profileDir.resolve("iris-reserved").toFile();
+            editVersionJson(profileJson, installDir);
         }
         Utils.writeToFile(profileJsonPath, profileJson.toString());
+        return installDir;
     }
     
-    private static void editVersionJson(Json profileJson) {
+    private static void editVersionJson(Json profileJson, File installDir) {
         Json.Factory factory = Json.factory();
         Map<String, Json> json = profileJson.asJsonMap();
         // Replace fabric-loader-etc with iris-fabric-loader-etc
@@ -64,6 +69,8 @@ public class VanillaLauncherIntegration {
                 entry.asJsonMap().put("url", factory.string("https://raw.githubusercontent.com/IrisShaders/Iris-Installer-Maven/master/"));
             }
         }
+        // Add jvm argument with path
+        json.get("arguments").asJsonMap().get("jvm").add(factory.string("-DirisModsFolder=" + installDir.getAbsolutePath()));
     }
 
     private static void installProfile(Path mcDir, Path instanceDir, String profileName, String versionId, Icon icon, ProfileInstaller.LauncherType launcherType) throws IOException {
